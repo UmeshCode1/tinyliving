@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Tiny Living Village</title>
+<title>Chhota Gaon · Tiny Living Village</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;background:#2b2118;color:#f1e2bd;font:14px Georgia,"Times New Roman",serif}
@@ -73,12 +73,12 @@ html,body{margin:0;background:#2b2118;color:#f1e2bd;font:14px Georgia,"Times New
 /* ===================== WORLD: constants, palette, layout ===================== */
 const C={grass:'#8fae6a',grassLt:'#a6c27c',grassDk:'#7b9b58',path:'#dcc394',pathDk:'#c6a871',
   water:'#6fa3a8',waterLt:'#a5d0cc',wood:'#8b5e3c',woodDk:'#63402a',roof:'#b5583f',roofDk:'#8a4029',
-  roof2:'#5d7a8f',wall:'#f2dfb8',wallDk:'#d9bd8e',stone:'#c2b8a3',stoneDk:'#9d9482',leaf:'#5f8a4c',
-  leafLt:'#86ad6b',leafDk:'#43693a',trunk:'#7a5536',wheat:'#e2c662',wheatDk:'#c29d3f',awnR:'#c2453a',
-  awnC:'#f6ecd2',window:'#ffd98a',night:'#1d2748',shade:'rgba(52,36,20,0.22)',skin1:'#f3cba4',
-  skin2:'#c48a5e',hair1:'#4a2e1d',hair2:'#d9a441',hair3:'#2e2b2a',hair4:'#a0522d',cloth1:'#c95c4a',
-  cloth2:'#4f7fa8',cloth3:'#7e9c5b',cloth4:'#8a5fa0',legs:'#4b3a2c',bubble:'#fff6e3',ink:'#3b2a1a',
-  gold:'#e8b84a',red:'#c2453a',heart:'#e0607a',paper:'#f1e2bd'};
+  roof2:'#b98a4e',wall:'#f2dfb8',wallDk:'#d9bd8e',stone:'#c2b8a3',stoneDk:'#9d9482',leaf:'#5f8a4c',
+  leafLt:'#86ad6b',leafDk:'#43693a',trunk:'#7a5536',wheat:'#e2c662',wheatDk:'#c29d3f',awnR:'#c4455f',
+  awnC:'#f2b632',window:'#ffd98a',night:'#1d2748',shade:'rgba(52,36,20,0.22)',skin1:'#f3cba4',
+  skin2:'#c48a5e',hair1:'#4a2e1d',hair2:'#d9a441',hair3:'#2e2b2a',hair4:'#a0522d',cloth1:'#c4455f',
+  cloth2:'#2f7f86',cloth3:'#e8923a',cloth4:'#7a3f8f',legs:'#4b3a2c',bubble:'#fff6e3',ink:'#3b2a1a',
+  gold:'#e8b84a',red:'#c2453a',heart:'#e0607a',paper:'#f1e2bd',marigold:'#f2b632',lotus:'#e87aa0',saffron:'#e8923a',temple:'#e9d2a8'};
 const TPD=720, MPT=2, DAY0=360;              // 720 ticks/day, 2 sim-minutes/tick, day starts 06:00
 const W=480, H=270;
 const BASE={grain:2,bread:8,fish:4,meal:14};
@@ -86,17 +86,20 @@ const SURPLUS={grain:8,fish:8,bread:3,meal:3};   // stock above this is carried 
 const MARKET_PAY=0.8, WAGE=6;                 // market buys surplus at 80% base; daily village-purse wage
 const FOOD=[['meal',45],['bread',35],['fish',30],['grain',12]];   // raw grain is a poor last resort
 const HUB={well:[236,150],market:[168,146],tavern:[322,134]};
-const HUBS=[HUB.well,HUB.market,HUB.tavern], HUBNAME=['the well','the market','the tavern'];
+const HUBS=[HUB.well,HUB.market,HUB.tavern], HUBNAME=['the well','the bazaar','the chai house'];
 const POND={x:398,y:210,rx:24,ry:13};
 const MILL=[286,208];
 const FIELDS=[[34,168,72,44],[34,96,64,40]];  // x,y,w,h
 const HOUSES=[[170,74],[206,74],[242,74],[278,74],[314,74],[350,74],[386,74],[150,240],[190,240],[230,240],[134,190],[354,190]];
-const NAMES=['Ada','Bram','Cora','Dov','Elin','Finn','Greta','Hugo','Ines','Jory','Kasia','Lio'];
+const NAMES=['Aarav','Meera','Ishaan','Priya','Kabir','Anjali','Rohan','Sita','Vikram','Lakshmi','Arjun','Devika'];
+const ITEM={grain:'wheat',bread:'roti',fish:'fish',meal:'thali'};
+const JOBNAME={farmer:'farmer',baker:'roti-maker',fisher:'fisher',innkeeper:'chai-wallah'};
+const TEMPLE=[120,126];
 const JOBS=['farmer','farmer','farmer','farmer','baker','baker','baker','fisher','fisher','fisher','innkeeper','innkeeper'];
 const TRAITS=['generous','proud','gossipy','forgiving','greedy'];
 const HAIR=[C.hair1,C.hair2,C.hair3,C.hair4], CLOTH=[C.cloth1,C.cloth2,C.cloth3,C.cloth4], SKIN=[C.skin1,C.skin2];
 const KIND={cheat:'overcharged',rude:'insulted',kind:'helped'};
-const DETAILS=['in front of everyone','twice','with a sneer','and never paid it back','at the market','while the other went hungry','and laughed about it'];
+const DETAILS=['in front of everyone','twice','with a sneer','and never paid it back','at the bazaar','while the other went hungry','and laughed about it'];
 
 /* ===================== UTILITIES ===================== */
 function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
@@ -138,7 +141,7 @@ function createSim(seed){
 
 /* ===================== SYSTEMS: event log, opinions, memory ===================== */
 // The log is the only write path for history. State changes always go through emit()/shift()/remember().
-const SPOTS=[['the well',HUB.well],['the market',HUB.market],['the tavern',HUB.tavern],['the mill',MILL],['the pond',[POND.x,POND.y]],
+const SPOTS=[['the well',HUB.well],['the bazaar',HUB.market],['the chai house',HUB.tavern],['the chakki',MILL],['the temple',TEMPLE],['the pond',[POND.x,POND.y]],
   ['the south fields',[70,190]],['the north fields',[66,116]],...HOUSES.map(h=>['the houses',[h[0],h[1]]])];
 function placeName(v){
   if(!v) return 'the village';
@@ -441,13 +444,13 @@ function sentence(S,v,ev,role){
   const N=i=>S.v[i].name, d=ev.d, has=t=>v.traits.includes(t);
   switch(ev.type){
     case 'trade':
-      if(d.fair) return role==='did'?(ev.id%2?`I sold ${d.item} to ${N(ev.b)} for ${d.price}.`:`${N(ev.b)} paid me ${d.price} for ${d.item} at ${ev.place}.`)
-        :(ev.id%2?`I bought ${d.item} from ${N(ev.a)} for ${d.price}.`:`At ${ev.place} I paid ${N(ev.a)} ${d.price} for ${d.item}.`);
-      if(role==='did') return `I charged ${N(ev.b)} ${d.price} for ${d.item} worth ${d.base}.`+(has('greedy')?' They should be grateful.':'');
-      if(role==='target') return `${N(ev.a)} charged me ${d.price} for ${d.item}, which is worth ${d.base}.`+(has('forgiving')?' I will try to let it go.':has('proud')?' I will not forget that.':'');
+      if(d.fair) return role==='did'?(ev.id%2?`I sold ${ITEM[d.item]} to ${N(ev.b)} for ${d.price}.`:`${N(ev.b)} paid me ${d.price} for ${ITEM[d.item]} at ${ev.place}.`)
+        :(ev.id%2?`I bought ${ITEM[d.item]} from ${N(ev.a)} for ${d.price}.`:`At ${ev.place} I paid ${N(ev.a)} ${d.price} for ${ITEM[d.item]}.`);
+      if(role==='did') return `I charged ${N(ev.b)} ${d.price} for ${ITEM[d.item]} worth ${d.base}.`+(has('greedy')?' They should be grateful.':'');
+      if(role==='target') return `${N(ev.a)} charged me ${d.price} for ${ITEM[d.item]}, which is worth ${d.base}.`+(has('forgiving')?' I will try to let it go.':has('proud')?' I will not forget that.':'');
       return `I saw ${N(ev.a)} overcharge ${N(ev.b)}.`;
     case 'gift':
-      return role==='did'?`I gave ${N(ev.b)} ${d.item} when they had none.`:`${N(ev.a)} gave me ${d.item} when I was hungry.`;
+      return role==='did'?`I gave ${N(ev.b)} ${ITEM[d.item]} when they had none.`:`${N(ev.a)} gave me ${ITEM[d.item]} when I was hungry.`;
     case 'insult':
       if(role==='did') return `I insulted ${N(ev.b)}.`;
       if(role==='target') return `${N(ev.a)} insulted me.`+(has('proud')?' I will not let it stand.':has('forgiving')?' I try not to dwell on it.':'');
@@ -469,7 +472,7 @@ function diaryFor(S,i,day){
   const items=v.mem.map(m=>({m,ev:S.log[m.ev]})).filter(x=>x.ev.day===day).sort((x,y)=>x.ev.t-y.ev.t);
   for(const {m,ev} of items){const s=sentence(S,v,ev,m.role);if(s)out.push(s);}
   const made=S.log.reduce((n,e)=>n+(e.type==='work'&&e.a===i&&e.day===day?e.d.qty:0),0);
-  const what={farmer:['harvested','grain'],baker:['baked','loaves'],fisher:['caught','fish'],innkeeper:['cooked','meals']}[v.job];
+  const what={farmer:['harvested','wheat'],baker:['rolled','rotis'],fisher:['caught','fish'],innkeeper:['served','thalis']}[v.job];
   if(made) out.push(`I ${what[0]} ${made} ${what[1]}.`);
   if(!out.length) return null;
   if(mood(v)<35) out.push('I am worn out.');
@@ -497,8 +500,8 @@ function reasonFor(S,v,j){
 function describe(S,ev){
   const N=i=>S.v[i].name, d=ev.d;
   switch(ev.type){
-    case 'trade': return d.fair?null:`${N(ev.a)} overcharged ${N(ev.b)}: ${d.price}c for ${d.item} (worth ${d.base})`;
-    case 'gift': return `${N(ev.a)} gave ${d.item} to hungry ${N(ev.b)}`;
+    case 'trade': return d.fair?null:`${N(ev.a)} overcharged ${N(ev.b)}: ${d.price}c for ${ITEM[d.item]} (worth ${d.base})`;
+    case 'gift': return `${N(ev.a)} gave ${ITEM[d.item]} to hungry ${N(ev.b)}`;
     case 'insult': return `${N(ev.a)} insulted ${N(ev.b)}`;
     case 'apology': return `${N(ev.a)} apologized to ${N(ev.b)}: ${d.accepted?'accepted':'refused'}`;
     case 'feud': return `${N(ev.a)} turned against ${N(ev.b)}: a feud begins`;
@@ -511,14 +514,14 @@ function activityText(S,v){
   switch(v.act){
     case 'talk': return `talking with ${S.v[v.partner].name}`;
     case 'walk':
-      if(v.buyFrom>=0) return `going to buy ${v.buy} from ${S.v[v.buyFrom].name}`;
+      if(v.buyFrom>=0) return `going to buy ${ITEM[v.buy]} from ${S.v[v.buyFrom].name}`;
       return v.then==='sleep'?'heading home for the night':v.then==='work'?'walking to work':
-        v.then==='sell'?'carrying surplus to the market':v.then==='socialize'?'walking over to chat':
+        v.then==='sell'?'carrying surplus to the bazaar':v.then==='socialize'?'walking over to chat':
         v.then==='rest'?'going home to rest':'on the way somewhere';
-    case 'work': return `working (${v.job==='farmer'?'the fields':v.job==='baker'?'the mill':v.job==='fisher'?'the pond':'the tavern'})`;
+    case 'work': return `working (${v.job==='farmer'?'the fields':v.job==='baker'?'the chakki':v.job==='fisher'?'the pond':'the chai house'})`;
     case 'socialize': return 'chatting around the village';
-    case 'sell': return 'selling surplus at the market';
-    case 'shop': return 'shopping at the market';
+    case 'sell': return 'selling surplus at the bazaar';
+    case 'shop': return 'shopping at the bazaar';
     case 'rest': return 'resting at home';
     case 'sleep': return 'asleep';
     default: return 'pausing';
@@ -574,6 +577,7 @@ function buildStatic(seed){
   }
   g.fillStyle=C.water; ell(POND.x,POND.y,POND.rx,POND.ry);
   g.fillStyle=C.waterLt; ell(POND.x-6,POND.y-4,7,2.5);
+  g.fillStyle=C.leafLt; ell(POND.x+8,POND.y+3,3,1.4); g.fillStyle=C.lotus; circ(POND.x+8,POND.y+2.2,1.5);   // lotus
   for(const f of FIELDS){
     g.fillStyle=C.wheatDk; g.fillRect(f[0]-2,f[1]-2,f[2]+4,f[3]+4);
     g.fillStyle=C.wheat; g.fillRect(f[0],f[1],f[2],f[3]);
@@ -585,7 +589,7 @@ function buildStatic(seed){
     if(FIELDS.some(f=>tx>f[0]-6&&tx<f[0]+f[2]+6&&ty>f[1]-6&&ty<f[1]+f[3]+6)) continue;
     if(HOUSES.some(h=>dist(tx,ty,h[0],h[1]-6)<20)) continue;
     if(dist(tx,ty,HUB.well[0],HUB.well[1])<18||dist(tx,ty,HUB.market[0],HUB.market[1])<18||
-       dist(tx,ty,HUB.tavern[0],HUB.tavern[1])<22||dist(tx,ty,MILL[0],MILL[1])<22||dist(tx,ty,POND.x,POND.y)<30) continue;
+       dist(tx,ty,HUB.tavern[0],HUB.tavern[1])<22||dist(tx,ty,MILL[0],MILL[1])<22||dist(tx,ty,POND.x,POND.y)<30||dist(tx,ty,TEMPLE[0],TEMPLE[1])<20) continue;
     trees.push([tx,ty]);
   }
   trees.sort((a,b)=>a[1]-b[1]).forEach(t=>tree(t[0],t[1]));
@@ -606,7 +610,17 @@ function buildStatic(seed){
   LANTERNS.push([HUB.tavern[0],HUB.tavern[1]-4]);
   house(MILL[0],MILL[1],C.roof,22,16);                 // mill with wheel
   g.strokeStyle=C.woodDk; g.lineWidth=1; g.beginPath(); g.arc(MILL[0]+14,MILL[1]-8,4,0,Math.PI*2); g.stroke();
-  HOUSES.forEach((h,i)=>house(h[0],h[1],i%2?C.roof:C.roof2,18,14));
+  HOUSES.forEach((h,i)=>{
+    house(h[0],h[1],i%2?C.roof:C.roof2,18,14);
+    g.fillStyle=C.lotus; circ(h[0],h[1]+3.5,2.4); g.fillStyle=C.marigold; circ(h[0],h[1]+3.5,1.5); g.fillStyle=C.paper; circ(h[0],h[1]+3.5,0.6);   // rangoli at the door
+  });
+  { const [tx,ty]=TEMPLE;                                  // small shrine with saffron flag and diya
+    g.fillStyle=C.shade; g.fillRect(tx-6,ty,14,2);
+    g.fillStyle=C.temple; g.fillRect(tx-6,ty-8,12,8); g.fillStyle=C.wallDk; g.fillRect(tx+4,ty-8,2,8);
+    g.fillStyle=C.saffron; tri(tx-7,ty-8,tx,ty-20,tx+7,ty-8); g.fillStyle=C.roofDk; tri(tx,ty-20,tx+7,ty-8,tx,ty-8);
+    g.fillStyle=C.wood; g.fillRect(tx-1,ty-6,2,6); g.fillStyle=C.window; g.fillRect(tx-1.5,ty-9.5,3,1);
+    g.strokeStyle=C.woodDk; g.lineWidth=0.8; line(tx,ty-20,tx,ty-25); g.fillStyle=C.red; tri(tx,ty-25,tx+4,ty-23.5,tx,ty-22);
+    LANTERNS.push([tx,ty-4]); }
   g=mainCtx;
   return c;
 }
@@ -637,7 +651,9 @@ function drawVillager(v){
   g.fillStyle=v.cloth; rr(x-2.6,by-7,5.2,6.5,2);
   g.fillStyle=v.skin; circ(x,by-9.5,2.4);
   g.fillStyle=v.hair; g.beginPath(); g.arc(x,by-9.5,2.6,Math.PI*1.05,Math.PI*1.95); g.fill();
-  if(v.hat){g.fillStyle=C.wood;rr(x-3.2,by-12.4,6.4,1.5,0.7);rr(x-1.7,by-14.2,3.4,2.2,1);}
+  g.fillStyle=C.marigold; g.fillRect(x-2.6,by-4.2,5.2,0.9);                      // embroidered border
+  if(v.hat){g.fillStyle=[C.saffron,C.lotus,C.cloth2,C.marigold][v.id%4];rr(x-3.1,by-13.1,6.2,3.4,1.7);g.fillRect(x-v.dir*3.4-0.5,by-11.2,1.2,2.2);}   // turban
+  else{g.fillStyle=C.red;g.fillRect(x+(v.dir>0?0.5:-1.1),by-10.9,0.7,0.7);}   // bindi
   g.fillStyle=C.ink; g.fillRect(x+(v.dir>0?0.6:-1.2),by-9.8,0.6,0.7);
   jobProp(v,x,by);
 }
@@ -697,7 +713,7 @@ function buildLabels(){
   labelsEl.innerHTML=''; chipsEl.innerHTML=''; labelEls=[];
   for(const v of S.v){
     const s=document.createElement('span'); labelsEl.appendChild(s); labelEls.push(s);
-    const b=document.createElement('button'); b.innerHTML=`<i style="background:${v.cloth}"></i>${esc(v.name)} · ${v.job}`;
+    const b=document.createElement('button'); b.innerHTML=`<i style="background:${v.cloth}"></i>${esc(v.name)} · ${JOBNAME[v.job]}`;
     b.onclick=e=>{e.stopPropagation();openPanel(v.id);}; b.dataset.id=v.id; chipsEl.appendChild(b);
   }
 }
@@ -729,7 +745,7 @@ function renderPanel(){
     .map(({ev,s})=>`<div class="mem"><span class="hint">Day ${ev.day} ${hhmm(ev.m)}, ${ev.place}</span><br>${esc(s)}</div>`).join('');
   let dia='';
   for(let d=S.day;d>=1;d--){const t=diaryFor(S,v.id,d);if(t)dia+=`<div class="dia"><b>Day ${d}</b> ${esc(t)}</div>`;}
-  panel.innerHTML=`<h2>${esc(v.name)}</h2><div class="sub">${v.job} · ${v.traits.join(', ')}</div>
+  panel.innerHTML=`<h2>${esc(v.name)}</h2><div class="sub">${JOBNAME[v.job]} · ${v.traits.join(', ')}</div>
     <div><i>${esc(activityText(S,v))}</i> · feeling ${moodWord(p)}</div><div style="margin-top:6px">${bars}</div>
     <div>Coins ${v.coins} · grain ${v.inv.grain} · bread ${v.inv.bread} · fish ${v.inv.fish} · meals ${v.inv.meal}</div>
     <h3>Feelings</h3><table>${feelings}</table>
