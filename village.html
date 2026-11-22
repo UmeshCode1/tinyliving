@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tiny Living Village</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#2b2118;color:#f1e2bd;font:14px Georgia,"Times New Roman",serif}
+#app{display:grid;grid-template-columns:minmax(0,1fr) 350px;grid-template-rows:auto minmax(0,1fr);gap:10px;height:100vh;padding:8px 10px}
+#top{grid-column:1/3;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:13px "Segoe UI",system-ui,sans-serif}
+#top button,#top input{font:inherit;background:#4a3a2a;color:#f1e2bd;border:1px solid #7a5f3f;border-radius:6px;padding:4px 10px;cursor:pointer}
+#top button.on{background:#c98f3c;color:#2b2118}
+#top input{width:110px;cursor:text}
+#clock{font:600 15px Georgia,serif;min-width:190px}
+#left{min-width:0;min-height:0;display:flex;flex-direction:column;align-items:center;gap:8px}
+#stage{position:relative;width:min(100%,calc((100vh - 150px) * 16 / 9));aspect-ratio:16/9}
+#view{width:100%;height:100%;image-rendering:pixelated;border-radius:8px;box-shadow:0 10px 36px #000a;cursor:pointer;background:#000;display:block}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:8px}
+#labels span{position:absolute;transform:translate(-50%,-100%);font:600 10px "Segoe UI",system-ui,sans-serif;color:#fff6e3;text-shadow:0 0 3px #2b2118,0 0 3px #2b2118,0 1px 2px #2b2118;white-space:nowrap;text-align:center;line-height:1.05}
+#labels span small{display:block;font-weight:400;font-size:8.5px;opacity:.85}
+#labels span.sel{color:#ffd98a}
+#chips{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;font:12px "Segoe UI",system-ui,sans-serif}
+#chips button{border:1px solid #7a5f3f;background:#4a3a2a;color:#f1e2bd;border-radius:12px;padding:2px 9px 2px 5px;cursor:pointer;display:flex;align-items:center;gap:5px}
+#chips button.sel{background:#c98f3c;color:#2b2118}
+#chips i{width:9px;height:9px;border-radius:50%;display:inline-block}
+#side{min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px}
+#panel{background:#f1e2bd;color:#3b2a1a;border:2px solid #8b5e3c;border-radius:10px;padding:11px 13px;box-shadow:0 8px 24px #0009;font-size:12.5px;line-height:1.35;flex:none}
+#panel h2{margin:0;font-size:19px}
+#panel h3{margin:10px 0 3px;font-size:13px;border-bottom:1px solid #b89c66}
+#panel .sub{color:#7a5f3f;margin-bottom:6px}
+#panel .bar{height:7px;background:#d7bf8c;border-radius:4px;overflow:hidden;margin:1px 0 6px}
+#panel .bar i{display:block;height:100%}
+#panel table{width:100%;border-collapse:collapse;font-size:11.5px}
+#panel td{padding:3px 2px;border-bottom:1px solid #d7bf8c;vertical-align:top}
+#panel .dia,#panel .mem{margin-top:5px;padding-top:4px;border-top:1px dashed #b89c66}
+#panel .hint{color:#7a5f3f;font-style:italic}
+#feedBox{background:#3a2d20;border:1px solid #6a5238;border-radius:10px;padding:8px 10px;font:12px "Segoe UI",system-ui,sans-serif;flex:1 0 180px;min-height:180px;overflow:auto}
+#feedBox h3{margin:0 0 5px;font:600 13px Georgia,serif;color:#ffd98a}
+#feed div{padding:3px 0;border-bottom:1px solid #4d3d2b}
+#feed .t{color:#b89c66;font-size:10.5px}
+#feed .rumor{color:#9fd0e8}#feed .feud,#feed .insult,#feed .trade{color:#f0a090}#feed .reconcile,#feed .apology,#feed .gift{color:#a8d49a}
+@media (max-width:820px){
+  html,body{overflow:auto}
+  #app{display:flex;flex-direction:column;height:auto;min-height:100vh}
+  #app{width:100%;overflow-x:hidden}
+  #left{width:100%}
+  #stage{width:100%}
+  #side{overflow:visible}
+  #feedBox{max-height:320px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <span id="clock">Day 1</span>
+    <button id="pause">Pause</button><button data-sp="1" class="on">1×</button><button data-sp="2">2×</button><button data-sp="4">4×</button>
+    <span>Seed</span><input id="seed" value="emberfall" aria-label="seed">
+    <button id="restart">Restart</button><button id="random">Random seed</button>
+  </div>
+  <div id="left">
+    <div id="stage"><canvas id="view" width="480" height="270" aria-label="village"></canvas><div id="labels"></div></div>
+    <div id="chips"></div>
+  </div>
+  <div id="side">
+    <div id="panel"></div>
+    <div id="feedBox"><h3>Village feed</h3><div id="feed"></div></div>
+  </div>
+</div>
+
+<script id="sim">
+/* ===================== WORLD: constants, palette, layout ===================== */
+const C={grass:'#8fae6a',grassLt:'#a6c27c',grassDk:'#7b9b58',path:'#dcc394',pathDk:'#c6a871',
+  water:'#6fa3a8',waterLt:'#a5d0cc',wood:'#8b5e3c',woodDk:'#63402a',roof:'#b5583f',roofDk:'#8a4029',
+  roof2:'#5d7a8f',wall:'#f2dfb8',wallDk:'#d9bd8e',stone:'#c2b8a3',stoneDk:'#9d9482',leaf:'#5f8a4c',
+  leafLt:'#86ad6b',leafDk:'#43693a',trunk:'#7a5536',wheat:'#e2c662',wheatDk:'#c29d3f',awnR:'#c2453a',
+  awnC:'#f6ecd2',window:'#ffd98a',night:'#1d2748',shade:'rgba(52,36,20,0.22)',skin1:'#f3cba4',
+  skin2:'#c48a5e',hair1:'#4a2e1d',hair2:'#d9a441',hair3:'#2e2b2a',hair4:'#a0522d',cloth1:'#c95c4a',
+  cloth2:'#4f7fa8',cloth3:'#7e9c5b',cloth4:'#8a5fa0',legs:'#4b3a2c',bubble:'#fff6e3',ink:'#3b2a1a',
+  gold:'#e8b84a',red:'#c2453a',heart:'#e0607a',paper:'#f1e2bd'};
+const TPD=720, MPT=2, DAY0=360;              // 720 ticks/day, 2 sim-minutes/tick, day starts 06:00
+const W=480, H=270;
+const BASE={grain:2,bread:8,fish:4,meal:14};
+const SURPLUS={grain:8,fish:8,bread:3,meal:3};   // stock above this is carried to the market // reference prices
+const MARKET_PAY=0.8, WAGE=6;                 // market buys surplus at 80% base; daily village-purse wage
+const FOOD=[['meal',45],['bread',35],['fish',30],['grain',12]];   // raw grain is a poor last resort
+const HUB={well:[236,150],market:[168,146],tavern:[322,134]};
+const HUBS=[HUB.well,HUB.market,HUB.tavern], HUBNAME=['the well','the market','the tavern'];
+const POND={x:398,y:210,rx:24,ry:13};
+const MILL=[286,208];
+const FIELDS=[[34,168,72,44],[34,96,64,40]];  // x,y,w,h
+const HOUSES=[[170,74],[206,74],[242,74],[278,74],[314,74],[350,74],[386,74],[150,240],[190,240],[230,240],[134,190],[354,190]];
+const NAMES=['Ada','Bram','Cora','Dov','Elin','Finn','Greta','Hugo','Ines','Jory','Kasia','Lio'];
+const JOBS=['farmer','farmer','farmer','farmer','baker','baker','baker','fisher','fisher','fisher','innkeeper','innkeeper'];
+const TRAITS=['generous','proud','gossipy','forgiving','greedy'];
+const HAIR=[C.hair1,C.hair2,C.hair3,C.hair4], CLOTH=[C.cloth1,C.cloth2,C.cloth3,C.cloth4], SKIN=[C.skin1,C.skin2];
+const KIND={cheat:'overcharged',rude:'insulted',kind:'helped'};
+const DETAILS=['in front of everyone','twice','with a sneer','and never paid it back','at the market','while the other went hungry','and laughed about it'];
+
+/* ===================== UTILITIES ===================== */
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function hashStr(s){let h=2166136261;s=String(s);for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+const dist=(ax,ay,bx,by)=>Math.hypot(ax-bx,ay-by);
+const choose=(R,a)=>a[Math.floor(R()*a.length)];
+function shuffle(a,R){const b=a.slice();for(let i=b.length-1;i>0;i--){const j=Math.floor(R()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+const minuteOf=t=>(t*MPT+DAY0)%1440;
+const dayOf=t=>Math.floor((t*MPT+DAY0)/1440)+1;
+const isNight=m=>m>=1320||m<360;
+const isWorkHours=m=>m>=390&&m<1200;
+const mood=v=>{const n=v.need;return clamp(100-(n.hunger*0.4+n.fatigue*0.3+n.social*0.3),0,100);};
+const moodWord=m=>m>65?'content':m>45?'fine':m>25?'tired':'miserable';
+const feelWord=s=>s>=60?'adores':s>=25?'likes':s>-25?'is neutral toward':s>-50?'distrusts':'feuds with';
+
+/* ===================== AGENTS: creation ===================== */
+function createSim(seed){
+  const S={seed:String(seed),rng:mulberry(hashStr(seed)),tick:0,day:1,log:[],rumors:{},rumorN:0,market:{grain:0,fish:0,bread:0,meal:0},v:[],
+    stats:{made:{grain:0,bread:0,fish:0,meal:0},marketCoins:0,sold:0}};
+  const R=S.rng, names=shuffle(NAMES,R);
+  S.v=names.map((name,i)=>{
+    const job=JOBS[i], h=HOUSES[i], f=FIELDS[i%2];
+    const work=job==='farmer'?[f[0]+6+R()*(f[2]-12),f[1]+6+R()*(f[3]-12)]
+      :job==='baker'?[MILL[0]+R()*8-4,MILL[1]+12]
+      :job==='fisher'?[POND.x-POND.rx-3,POND.y+R()*6-3]
+      :[HUB.tavern[0]+R()*6-3,HUB.tavern[1]+14];
+    return {id:i,name,job,traits:shuffle(TRAITS,R).slice(0,R()<0.4?3:2),work,
+      hair:choose(R,HAIR),cloth:choose(R,CLOTH),skin:choose(R,SKIN),hat:R()<0.5,
+      hx:h[0],hy:h[1],x:h[0],y:h[1]+4,tx:h[0],ty:h[1]+4,speed:1.5+R()*0.5,
+      act:'idle',actT:0,then:'idle',thenT:0,walkT:0,buy:null,buyFrom:-1,partner:-1,sess:0,
+      need:{hunger:10+R()*20,fatigue:10+R()*15,social:20+R()*25},
+      coins:12,inv:{grain:0,bread:0,fish:0,meal:0},
+      op:Array.from({length:NAMES.length},(_,j)=>j===i?0:R()*6-3),   // opinion of each villager
+      feud:[],mem:[],bel:{},lastTalk:{},walk:0,dir:1,icon:null,iconT:0};
+  });
+  return S;
+}
+
+/* ===================== SYSTEMS: event log, opinions, memory ===================== */
+// The log is the only write path for history. State changes always go through emit()/shift()/remember().
+const SPOTS=[['the well',HUB.well],['the market',HUB.market],['the tavern',HUB.tavern],['the mill',MILL],['the pond',[POND.x,POND.y]],
+  ['the south fields',[70,190]],['the north fields',[66,116]],...HOUSES.map(h=>['the houses',[h[0],h[1]]])];
+function placeName(v){
+  if(!v) return 'the village';
+  let best='the lanes',bd=34;
+  for(const [n,p] of SPOTS){const d=dist(v.x,v.y,p[0],p[1]);if(d<bd){bd=d;best=n;}}
+  return best;
+}
+function emit(S,type,a,b,d,icon){
+  const ev={id:S.log.length,t:S.tick,day:dayOf(S.tick),m:minuteOf(S.tick),type,a,b,place:placeName(S.v[a]),d:d||{}};
+  S.log.push(ev);
+  if(icon) for(const i of [a,b]) if(i>=0){S.v[i].icon=icon;S.v[i].iconT=40;}
+  return ev;
+}
+function remember(S,i,ev,w,role){
+  const mem=S.v[i].mem; mem.push({ev:ev.id,w,role});
+  if(mem.length>80){let k=0;for(let j=1;j<mem.length;j++) if(mem[j].w<mem[k].w) k=j; mem.splice(k,1);}   // bounded memory
+}
+function shift(S,a,b,d){
+  if(a===b) return;
+  const v=S.v[a]; v.op[b]=clamp(v.op[b]+d,-100,100);
+  if(!v.feud[b]&&v.op[b]<=-50){v.feud[b]=true;const ev=emit(S,'feud',a,b,{},'angry');remember(S,a,ev,0.7,'feud');}
+  else if(v.feud[b]&&v.op[b]>=-20){v.feud[b]=false;const ev=emit(S,'reconcile',a,b,{},'heart');remember(S,a,ev,0.7,'reconcile');}
+}
+function witnesses(S,ids,x,y,ev,w){
+  const out=[];
+  for(const v of S.v){
+    if(ids.includes(v.id)||v.act==='sleep'||dist(v.x,v.y,x,y)>40) continue;
+    remember(S,v.id,ev,w,'saw'); out.push(v.id);
+  }
+  return out;
+}
+function newRumor(S,ev,doer,target,kind,sev,det){
+  const r={id:S.rumorN++,origin:ev.id,doer,target,kind,sev,det,n:1,versions:[{v:1,from:doer,to:null,doer,sev,det}]};
+  S.rumors[r.id]=r; return r;
+}
+function knowRumor(S,i,r,p){S.v[i].bel[r.id]={v:1,p,sev:r.sev,doer:r.doer,det:[]};}
+
+/* ===================== SYSTEMS: rumors ===================== */
+// A teller passes a rumor they believe. Mutation depends on the teller's opinion of the target,
+// their traits (proud/greedy shift blame, gossipy adds detail). Belief depends on trust in the teller.
+function tellRumor(S,t,l){
+  const R=S.rng, T=S.v[t], L=S.v[l];
+  const ids=Object.keys(T.bel).map(Number).filter(k=>S.rumors[k]&&T.bel[k].p>0.35&&!L.bel[k]);   // only news the listener lacks
+  if(!ids.length) return;
+  const rid=choose(R,ids), b=T.bel[rid], r=S.rumors[rid];
+  let sev=b.sev, doer=b.doer, det=b.det.slice(), mut=[];
+  const tOp=T.op[r.target];
+  if(tOp<-20&&R()<0.8){sev=clamp(sev+0.2+R()*0.15,0,1);mut.push('exaggerated');if(R()<0.5)det.push(choose(R,DETAILS));}
+  else if(tOp>20&&R()<0.8){sev=clamp(sev-0.2,0.05,1);mut.push('softened');if(det.length&&R()<0.5)det.pop();}
+  if(doer===t&&(T.traits.includes('proud')||T.traits.includes('greedy'))&&R()<0.5){
+    const others=S.v.filter(o=>o.id!==t&&o.id!==r.target&&o.id!==l);
+    if(others.length){doer=choose(R,others).id;mut.push('blame shifted');}
+  }
+  if(T.traits.includes('gossipy')&&R()<0.25&&det.length<3) det.push(choose(R,DETAILS));
+  det=det.slice(-3);
+  const ver=++r.n;
+  r.versions.push({v:ver,from:t,to:l,doer,sev:+sev.toFixed(2),det,mut});
+  if(r.versions.length>30) r.versions.splice(1,1);           // keep origin + recent versions only
+  const bad=r.kind!=='kind';
+  const p=clamp(0.5+(L.op[t]/100)*0.4+(bad?-1:1)*(L.op[doer]/300),0.05,0.95);
+  const believed=R()<p;
+  const ev=emit(S,'rumor',t,l,{rid,v:ver,doer,target:r.target,kind:r.kind,sev:+sev.toFixed(2),det,mut,believed,
+    ax:T.x,ay:T.y,bx:L.x,by:L.y},believed?'excl':null);
+  remember(S,l,ev,0.35+sev*0.5,'heard');
+  remember(S,t,ev,0.2,'told');
+  L.bel[rid]={v:ver,p:believed?p:0.1,sev,doer,det};
+  if(believed) shift(S,l,doer,bad?-Math.round(sev*12):Math.round(sev*6));
+}
+
+/* ===================== SYSTEMS: trade, gifts, conflict ===================== */
+function trade(S,s,b,item,qty){
+  const R=S.rng, Sv=S.v[s], B=S.v[b];
+  if(Sv.inv[item]<1||B.coins<1) return false;
+  const base=BASE[item];
+  let mk=1.1+R()*0.2;
+  if(Sv.traits.includes('greedy')) mk+=0.35+R()*0.25;
+  if(Sv.traits.includes('generous')) mk-=0.2;
+  if(Sv.inv[item]<=2) mk+=0.15;                       // scarcity raises the price
+  const unit=Math.max(1,Math.round(base*mk));
+  qty=Math.max(1,Math.min(qty||1,Sv.inv[item],Math.floor(B.coins/unit)));
+  const price=unit*qty;
+  if(B.coins<price) return false;
+  const fair=mk<=1.35;
+  const p=clamp(0.35+(B.need.hunger/100)*0.5+(B.op[s]/100)*0.4-Math.max(0,mk-1)*0.6,0.02,0.97);
+  if(R()>p) return false;
+  Sv.inv[item]-=qty; B.inv[item]+=qty; B.coins-=price; Sv.coins+=price;
+  const ev=emit(S,'trade',s,b,{item,price,base:base*qty,qty,fair},fair?'coin':'angry');
+  if(fair){shift(S,b,s,2);shift(S,s,b,1);remember(S,s,ev,0.25,'did');remember(S,b,ev,0.25,'target');}
+  else{
+    shift(S,b,s,-8);remember(S,s,ev,0.7,'did');remember(S,b,ev,0.9,'target');
+    const seen=witnesses(S,[s,b],Sv.x,Sv.y,ev,0.35);
+    if(R()<0.6){
+      const r=newRumor(S,ev,s,b,'cheat',clamp((mk-1)/0.5,0.2,1),[]);
+      knowRumor(S,s,r,0.9);knowRumor(S,b,r,0.9);seen.forEach(i=>knowRumor(S,i,r,0.9));
+    }
+  }
+  return true;
+}
+function maybeGift(S,g,r){
+  const G=S.v[g], Rv=S.v[r], R=S.rng;
+  if(!G.traits.includes('generous')||Rv.need.hunger<60||FOOD.some(f=>Rv.inv[f[0]]>0)) return;
+  const item=['fish','bread','meal'].find(k=>G.inv[k]>=2);
+  if(!item||Rv.op[g]<-20) return;
+  if(Rv.traits.includes('proud')&&Rv.op[g]<30&&R()<0.5) return;   // proud people refuse charity
+  G.inv[item]--; Rv.inv[item]++;
+  shift(S,r,g,8); shift(S,g,r,2);
+  const ev=emit(S,'gift',g,r,{item},'heart');
+  remember(S,g,ev,0.5,'did'); remember(S,r,ev,0.8,'target');
+}
+function insult(S,t,l){
+  const T=S.v[t], L=S.v[l];
+  shift(S,l,t,-10); shift(S,t,l,-3);
+  const ev=emit(S,'insult',t,l,{},'angry');
+  remember(S,t,ev,0.6,'did'); remember(S,l,ev,0.9,'target');
+  const seen=witnesses(S,[t,l],(T.x+L.x)/2,(T.y+L.y)/2,ev,0.35);
+  if(S.rng()<0.7){const r=newRumor(S,ev,t,l,'rude',0.55,[]);knowRumor(S,t,r,0.9);knowRumor(S,l,r,0.9);seen.forEach(i=>knowRumor(S,i,r,0.9));}
+}
+function recentInsultBy(S,x,y){
+  return S.v[x].mem.some(m=>{const e=S.log[m.ev];return m.role==='did'&&e.type==='insult'&&e.b===y&&S.tick-e.t<2*TPD;});
+}
+function apologize(S,t,l){
+  const R=S.rng, L=S.v[l];
+  const accept=(L.op[t]>-60||L.traits.includes('forgiving'))&&R()<0.8;
+  if(accept){shift(S,l,t,14);shift(S,t,l,8);} else shift(S,l,t,-2);
+  const ev=emit(S,'apology',t,l,{accepted:accept},accept?'heart':null);
+  remember(S,t,ev,0.6,'did'); remember(S,l,ev,0.6,'target');
+}
+
+/* ===================== AGENTS: talking ===================== */
+function startTalk(S,a,b){
+  a.act=b.act='talk'; a.partner=b.id; b.partner=a.id; a.actT=b.actT=12;
+  a.lastTalk[b.id]=b.lastTalk[a.id]=S.tick;
+}
+function resolveTalk(S,a,b){
+  const R=S.rng;
+  for(const [s,k] of [[a,b],[b,a]]) if(k.buyFrom===s.id){const it=k.buy;k.buyFrom=-1;k.buy=null;trade(S,s.id,k.id,it,k.job==='baker'&&it==='grain'?10:k.job==='innkeeper'?6:1);}
+  maybeGift(S,a.id,b.id); maybeGift(S,b.id,a.id);
+  for(const [x,y] of [[a,b],[b,a]]){
+    const touchy=x.traits.includes('proud')||x.traits.includes('greedy');
+    const irritable=(x.need.hunger>70||x.need.fatigue>80)&&x.op[y.id]<8&&R()<0.1;   // hunger and exhaustion shorten tempers
+    if(((x.op[y.id]<-1&&touchy&&R()<0.2)||irritable)) insult(S,x.id,y.id);
+    else if(x.op[y.id]<-10&&(recentInsultBy(S,x.id,y.id)||(x.traits.includes('forgiving')&&x.feud[y.id]))&&R()<0.5) apologize(S,x.id,y.id);
+  }
+  for(const [t,l] of [[a,b],[b,a]]) if(R()<(t.traits.includes('gossipy')?0.7:0.4)) tellRumor(S,t.id,l.id);
+  shift(S,a.id,b.id,1); shift(S,b.id,a.id,1);      // shared time slowly warms people up
+  a.need.social=clamp(a.need.social-25,0,100); b.need.social=clamp(b.need.social-25,0,100);
+}
+const CAN_TALK={walk:1,work:1,socialize:1,idle:1,sell:1};
+function pairing(S){
+  const R=S.rng, vs=S.v;
+  for(let i=0;i<vs.length;i++) for(let j=i+1;j<vs.length;j++){
+    const a=vs[i], b=vs[j];
+    if(!CAN_TALK[a.act]||!CAN_TALK[b.act]) continue;
+    if(dist(a.x,a.y,b.x,b.y)>12) continue;
+    if(a.feud[j]||b.feud[i]){                    // feuding pairs avoid each other, unless a forgiving one reaches out
+      if(!(a.traits.includes('forgiving')||b.traits.includes('forgiving'))||S.tick-(a.lastTalk[j]||-999)<150||R()>0.05) continue;
+      startTalk(S,a,b); continue;
+    }
+    const buying=a.buyFrom===j||b.buyFrom===i;
+    if(!buying&&S.tick-(a.lastTalk[j]||-999)<50) continue;
+    const p=buying?1:(a.act==='socialize'&&b.act==='socialize'?0.2:0.03);
+    if(R()<p) startTalk(S,a,b);
+  }
+}
+
+/* ===================== AGENTS: jobs & economy ===================== */
+function produce(S,v){
+  const t=S.tick, inv=v.inv;
+  let made=null;
+  if(v.job==='farmer'&&t%12===0&&inv.grain<12) made='grain';
+  else if(v.job==='baker'&&t%20===0&&inv.grain>=2&&inv.bread<12){inv.grain-=2;made='bread';}
+  else if(v.job==='fisher'&&t%30===0&&inv.fish<12) made='fish';
+  else if(v.job==='innkeeper'&&t%30===0&&inv.grain>=2&&inv.fish>=1&&inv.meal<10){inv.grain-=2;inv.fish--;made='meal';}   // stew: grain + fish
+  if(made){inv[made]++;S.stats.made[made]++;v.sess++;}
+}
+function sellSurplus(S,v){
+  for(const it of ['grain','fish','bread','meal']) if(v.inv[it]>SURPLUS[it]){
+    v.inv[it]--; const p=Math.max(1,Math.round(BASE[it]*MARKET_PAY));
+    v.coins+=p; S.stats.marketCoins+=p; S.stats.sold++; S.market[it]++; return;   // the market keeps the stock for resale
+  }
+}
+function shopBuy(S,v){
+  const it=v.shopItem;
+  if(it&&S.market[it]>0&&v.coins>=BASE[it]&&v.inv[it]<12){S.market[it]--;v.coins-=BASE[it];v.inv[it]++;}
+}
+function eatBest(S,v){
+  for(const [k,restore] of FOOD) if(v.inv[k]>0){v.inv[k]--;v.need.hunger=clamp(v.need.hunger-restore,0,100);return true;}
+  return false;
+}
+function findSeller(S,v,item){
+  let best=-1,bs=-1e9;
+  for(const o of S.v){
+    if(o.id===v.id||o.inv[item]<1||o.act==='sleep'||v.feud[o.id]||o.feud[v.id]||v.op[o.id]<-40) continue;
+    const sc=v.op[o.id]+S.rng()*20-dist(v.x,v.y,o.x,o.y)/8;
+    if(sc>bs){bs=sc;best=o.id;}
+  }
+  return best;
+}
+
+/* ===================== AGENTS: goals & movement ===================== */
+function go(S,v,x,y,then,thenT,walkT,seller,item){
+  v.act='walk'; v.tx=x; v.ty=y; v.then=then; v.thenT=thenT||0; v.walkT=walkT||300;
+  v.buyFrom=seller===undefined?-1:seller; v.buy=v.buyFrom>=0?item:null;
+}
+// Needs drive the choice: food > sleep > rest > buying inputs > selling surplus > company > work > home.
+function chooseGoal(S,v){
+  const R=S.rng, m=minuteOf(S.tick), n=v.need, home=[v.hx,v.hy+4];
+  if(n.hunger>50&&eatBest(S,v)) return;
+  if(isNight(m)) return go(S,v,home[0],home[1],'sleep',999);
+  if(n.hunger>55){
+    for(const it of ['meal','bread','fish']){
+      if(v.coins<BASE[it]) continue;
+      const s=findSeller(S,v,it);
+      if(s>=0){const o=S.v[s];return go(S,v,o.x,o.y,'idle',0,300,s,it);}
+    }
+    const mi=['meal','bread','fish','grain'].find(it=>S.market[it]>0&&v.coins>=BASE[it]);
+    if(mi){v.shopItem=mi;return go(S,v,HUB.market[0]+R()*8-4,HUB.market[1]+R()*8-4,'shop',8,300);}
+  }
+  if(n.fatigue>70) return go(S,v,home[0],home[1],'rest',80,400);
+  const need=v.job==='baker'&&v.inv.grain<4?'grain':v.job==='innkeeper'?(v.inv.grain<2?'grain':v.inv.fish<1?'fish':null):null;
+  if(need&&S.market[need]>1&&v.coins>=BASE[need]){v.shopItem=need;return go(S,v,HUB.market[0]+R()*8-4,HUB.market[1]+R()*8-4,'shop',24,300);}
+  if(need&&v.coins>=BASE[need]){const s=findSeller(S,v,need);if(s>=0){const o=S.v[s];return go(S,v,o.x,o.y,'idle',0,300,s,need);}}
+  for(const it of ['grain','fish','bread','meal']) if(v.inv[it]>SURPLUS[it])
+    return go(S,v,HUB.market[0]+R()*8-4,HUB.market[1]+R()*8-4,'sell',40,300);
+  if(n.social>55){const h=choose(R,HUBS);return go(S,v,h[0]+R()*16-8,h[1]+R()*12-6,'socialize',50,300);}
+  if(isWorkHours(m)) return go(S,v,v.work[0],v.work[1],'work',160,300);
+  return go(S,v,home[0],home[1],'idle',30,200);
+}
+function moveTo(v){
+  const dx=v.tx-v.x, dy=v.ty-v.y, d=Math.hypot(dx,dy);
+  if(d<=v.speed){v.x=v.tx;v.y=v.ty;return true;}
+  v.x+=dx/d*v.speed; v.y+=dy/d*v.speed; v.walk+=0.7;
+  if(Math.abs(dx)>0.3) v.dir=dx>0?1:-1;
+  return false;
+}
+function updateNeeds(v){
+  const n=v.need, sl=v.act==='sleep';
+  n.hunger=clamp(n.hunger+(sl?0.03:0.07),0,100);
+  n.social=clamp(n.social+(sl?0:0.04),0,100);
+  if(sl) n.fatigue=clamp(n.fatigue-0.25,0,100);
+  else if(v.act==='rest') n.fatigue=clamp(n.fatigue-0.12,0,100);
+  else n.fatigue=clamp(n.fatigue+0.05,0,100);
+}
+function finishAct(S,v){
+  if(v.act==='work'&&v.sess>0) emit(S,'work',v.id,-1,{job:v.job,qty:v.sess});
+  v.sess=0; v.act='idle'; v.actT=0;
+}
+function dailyUpkeep(S){
+  for(const v of S.v){
+    v.coins+=WAGE;                                   // village purse pays a daily wage for chores
+    for(const m of v.mem) m.w*=(m.role==='did'||m.role==='target')?0.96:0.9;   // weak memories fade
+    v.mem=v.mem.filter(m=>m.w>0.06);
+    if(v.traits.includes('forgiving')) v.op=v.op.map(o=>o<0?Math.min(0,o+0.5):o);   // forgiving people let grudges cool a little
+    for(const k in v.bel){v.bel[k].p*=0.97;if(v.bel[k].p<0.06)delete v.bel[k];}
+  }
+  const held=new Set();                                // forget rumors nobody holds any more
+  for(const v of S.v) for(const k in v.bel) held.add(+k);
+  for(const k in S.rumors) if(!held.has(+k)) delete S.rumors[k];
+}
+
+/* ===================== SIM STEP (fixed timestep: one call = one tick) ===================== */
+function step(S){
+  S.tick++;
+  const m=minuteOf(S.tick), night=isNight(m), dy=dayOf(S.tick);
+  if(dy!==S.day){S.day=dy;dailyUpkeep(S);}
+  for(const v of S.v){
+    updateNeeds(v);
+    if(v.iconT>0) v.iconT--;
+    if(v.act==='talk'){
+      if(--v.actT<=0){const p=S.v[v.partner]; if(v.id<p.id) resolveTalk(S,v,p); v.act='idle'; v.partner=-1;}
+      continue;
+    }
+    if(v.act==='walk'){
+      if(v.buyFrom>=0){
+        const s=S.v[v.buyFrom];
+        if(s.act==='sleep'){v.buyFrom=-1;v.buy=null;v.act='idle';continue;}
+        v.tx=s.x; v.ty=s.y;
+        if(dist(v.x,v.y,s.x,s.y)>10) moveTo(v);      // stand close; pairing() starts the trade talk
+      } else if(moveTo(v)){v.act=v.then;v.actT=v.thenT;}
+      if(--v.walkT<=0){v.act='idle';v.buyFrom=-1;v.buy=null;}
+      continue;
+    }
+    if(v.act==='idle'){v.buyFrom=-1;v.buy=null;chooseGoal(S,v);continue;}
+    if(v.act==='work') produce(S,v);
+    else if(v.act==='sell'&&S.tick%6===0) sellSurplus(S,v);
+    else if(v.act==='shop'&&S.tick%3===0) shopBuy(S,v);
+    v.actT--;
+    const stop=v.actT<=0||(v.act==='sleep'&&!night)||((v.act==='work'||v.act==='socialize')&&(v.need.hunger>70||v.need.fatigue>85))||(v.act==='work'&&night);
+    if(stop) finishAct(S,v);
+  }
+  pairing(S);
+}
+
+/* ===================== DIARIES & DESCRIPTIONS (built only from log + memories) ===================== */
+function rumorClaim(S,d){
+  const sv=d.sev>0.75?' viciously':d.sev<0.3?' a little':'';
+  return `${S.v[d.doer].name} ${KIND[d.kind]}${sv} ${S.v[d.target].name}`+(d.det&&d.det.length?`, ${d.det.join(', ')}`:'');
+}
+function sentence(S,v,ev,role){
+  const N=i=>S.v[i].name, d=ev.d, has=t=>v.traits.includes(t);
+  switch(ev.type){
+    case 'trade':
+      if(d.fair) return role==='did'?(ev.id%2?`I sold ${d.item} to ${N(ev.b)} for ${d.price}.`:`${N(ev.b)} paid me ${d.price} for ${d.item} at ${ev.place}.`)
+        :(ev.id%2?`I bought ${d.item} from ${N(ev.a)} for ${d.price}.`:`At ${ev.place} I paid ${N(ev.a)} ${d.price} for ${d.item}.`);
+      if(role==='did') return `I charged ${N(ev.b)} ${d.price} for ${d.item} worth ${d.base}.`+(has('greedy')?' They should be grateful.':'');
+      if(role==='target') return `${N(ev.a)} charged me ${d.price} for ${d.item}, which is worth ${d.base}.`+(has('forgiving')?' I will try to let it go.':has('proud')?' I will not forget that.':'');
+      return `I saw ${N(ev.a)} overcharge ${N(ev.b)}.`;
+    case 'gift':
+      return role==='did'?`I gave ${N(ev.b)} ${d.item} when they had none.`:`${N(ev.a)} gave me ${d.item} when I was hungry.`;
+    case 'insult':
+      if(role==='did') return `I insulted ${N(ev.b)}.`;
+      if(role==='target') return `${N(ev.a)} insulted me.`+(has('proud')?' I will not let it stand.':has('forgiving')?' I try not to dwell on it.':'');
+      return `I saw ${N(ev.a)} insult ${N(ev.b)}.`;
+    case 'apology':
+      if(role==='did') return d.accepted?`I apologized to ${N(ev.b)}, and they accepted.`:`I apologized to ${N(ev.b)}, but they would not hear it.`;
+      return d.accepted?`${N(ev.a)} apologized, and I accepted.`:`${N(ev.a)} apologized, and I turned them away.`;
+    case 'feud': return `I stopped speaking to ${N(ev.b)}.`;
+    case 'reconcile': return `I made peace with ${N(ev.b)}.`;
+    case 'rumor':
+      if(role==='told') return `I told ${N(ev.b)} that ${rumorClaim(S,d)}.`;
+      if(role==='heard') return `Hearsay from ${N(ev.a)}, who said ${rumorClaim(S,d)}.`+(d.believed?(has('gossipy')?' I believe it, and I will pass it on.':' I believe it.'):" I don't believe a word of it.");
+      return null;
+    default: return null;
+  }
+}
+function diaryFor(S,i,day){
+  const v=S.v[i], out=[];
+  const items=v.mem.map(m=>({m,ev:S.log[m.ev]})).filter(x=>x.ev.day===day).sort((x,y)=>x.ev.t-y.ev.t);
+  for(const {m,ev} of items){const s=sentence(S,v,ev,m.role);if(s)out.push(s);}
+  const made=S.log.reduce((n,e)=>n+(e.type==='work'&&e.a===i&&e.day===day?e.d.qty:0),0);
+  const what={farmer:['harvested','grain'],baker:['baked','loaves'],fisher:['caught','fish'],innkeeper:['cooked','meals']}[v.job];
+  if(made) out.push(`I ${what[0]} ${made} ${what[1]}.`);
+  if(!out.length) return null;
+  if(mood(v)<35) out.push('I am worn out.');
+  return out.join(' ');
+}
+function reasonFor(S,v,j){
+  let best=null;
+  for(const m of v.mem){
+    const ev=S.log[m.ev];
+    if(ev.a!==j&&ev.b!==j) continue;
+    if(!best||m.w>=best.m.w) best={m,ev};
+  }
+  if(!best) return 'no shared history';
+  const {m,ev}=best, t=({
+    trade:ev.d.fair?'traded fairly':(m.role==='target'?'overcharged me':'overcharged them'),
+    gift:m.role==='target'?'gave me food':'gave food',
+    insult:m.role==='target'?'insulted me':m.role==='did'?'insulted them':'insulted someone',
+    apology:ev.d.accepted?'made peace':'apology refused',
+    feud:'a feud', reconcile:'made peace',
+    rumor:m.role==='heard'?'passed on a rumor':'I passed on gossip'
+  })[ev.type]||'shared time';
+  return `${t} (day ${ev.day})`;
+}
+// Observer-side wording for the village feed (the diary above only uses what a villager knows).
+function describe(S,ev){
+  const N=i=>S.v[i].name, d=ev.d;
+  switch(ev.type){
+    case 'trade': return d.fair?null:`${N(ev.a)} overcharged ${N(ev.b)}: ${d.price}c for ${d.item} (worth ${d.base})`;
+    case 'gift': return `${N(ev.a)} gave ${d.item} to hungry ${N(ev.b)}`;
+    case 'insult': return `${N(ev.a)} insulted ${N(ev.b)}`;
+    case 'apology': return `${N(ev.a)} apologized to ${N(ev.b)}: ${d.accepted?'accepted':'refused'}`;
+    case 'feud': return `${N(ev.a)} turned against ${N(ev.b)}: a feud begins`;
+    case 'reconcile': return `${N(ev.a)} made peace with ${N(ev.b)}`;
+    case 'rumor': return `${N(ev.a)} told ${N(ev.b)} (v${d.v}${d.mut.length?', '+d.mut.join('/'):''}, ${d.believed?'believed':'doubted'}): ${rumorClaim(S,d)}`;
+    default: return null;
+  }
+}
+function activityText(S,v){
+  switch(v.act){
+    case 'talk': return `talking with ${S.v[v.partner].name}`;
+    case 'walk':
+      if(v.buyFrom>=0) return `going to buy ${v.buy} from ${S.v[v.buyFrom].name}`;
+      return v.then==='sleep'?'heading home for the night':v.then==='work'?'walking to work':
+        v.then==='sell'?'carrying surplus to the market':v.then==='socialize'?'walking over to chat':
+        v.then==='rest'?'going home to rest':'on the way somewhere';
+    case 'work': return `working (${v.job==='farmer'?'the fields':v.job==='baker'?'the mill':v.job==='fisher'?'the pond':'the tavern'})`;
+    case 'socialize': return 'chatting around the village';
+    case 'sell': return 'selling surplus at the market';
+    case 'shop': return 'shopping at the market';
+    case 'rest': return 'resting at home';
+    case 'sleep': return 'asleep';
+    default: return 'pausing';
+  }
+}
+</script>
+<script>
+/* ===================== RENDER: static world, sprites, lighting ===================== */
+const cv=document.getElementById('view');
+let g=cv.getContext('2d');                        // `g` is the active drawing context (swapped while pre-rendering)
+const mainCtx=g;
+const WINDOWS=[], LANTERNS=[];
+let S=null, stat=null, sel=-1, speed=1, paused=false, lastEv=0, trails=[], labelEls=[];
+const $=id=>document.getElementById(id);
+const panel=$('panel'), clockEl=$('clock'), feedEl=$('feed'), labelsEl=$('labels'), chipsEl=$('chips');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function rr(x,y,w,h,r){g.beginPath();if(g.roundRect)g.roundRect(x,y,w,h,r);else g.rect(x,y,w,h);g.fill();}
+function circ(x,y,r){g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();}
+function line(x1,y1,x2,y2){g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke();}
+function tri(a,b,c,d,e,f){g.beginPath();g.moveTo(a,b);g.lineTo(c,d);g.lineTo(e,f);g.closePath();g.fill();}
+function ell(x,y,rx,ry){g.beginPath();g.ellipse(x,y,rx,ry,0,0,Math.PI*2);g.fill();}
+
+function house(cx,by,roof,w,hh){
+  const L=cx-w/2, T=by-hh;
+  g.fillStyle=C.shade; g.fillRect(L+2,by-1,w,2);            // light from upper-left: shade falls right/down
+  g.fillStyle=C.wall; g.fillRect(L,T,w,hh);
+  g.fillStyle=C.wallDk; g.fillRect(L+w-2,T,2,hh);
+  g.fillStyle=roof; tri(L-2,T+1,cx,T-w*0.45,L+w+2,T+1);
+  g.fillStyle=C.wood; rr(cx-2,by-5,4,5,1);
+  g.fillStyle=C.window; g.fillRect(L+3,T+3,3,3); g.fillRect(L+w-6,T+3,3,3);
+  WINDOWS.push([L+4.5,T+4.5],[L+w-4.5,T+4.5]);
+}
+function tree(cx,cy){
+  g.fillStyle=C.shade; ell(cx+2,cy,4,1.6);
+  g.fillStyle=C.trunk; g.fillRect(cx-1,cy-4,2,4);
+  g.fillStyle=C.leaf; circ(cx,cy-8,4.5);
+  g.fillStyle=C.leafDk; circ(cx+2,cy-6,2.8);
+  g.fillStyle=C.leafLt; circ(cx-1.5,cy-9.5,2.4);
+}
+// The whole static village is painted once into an offscreen canvas.
+function buildStatic(seed){
+  const c=document.createElement('canvas'); c.width=W; c.height=H;
+  const R=mulberry(hashStr('look'+seed));
+  g=c.getContext('2d'); WINDOWS.length=0; LANTERNS.length=0;
+  g.fillStyle=C.grass; g.fillRect(0,0,W,H);
+  for(let i=0;i<300;i++){g.fillStyle=R()<0.5?C.grassLt:C.grassDk;g.fillRect(R()*W|0,R()*H|0,2,1);}
+  const roads=HOUSES.map(h=>[h[0],h[1]+2,HUB.well[0],HUB.well[1]]);
+  roads.push([HUB.well[0],HUB.well[1],HUB.market[0],HUB.market[1]],[HUB.well[0],HUB.well[1],HUB.tavern[0],HUB.tavern[1]],
+    [HUB.well[0],HUB.well[1],MILL[0],MILL[1]],[MILL[0],MILL[1],POND.x-POND.rx,POND.y],[HUB.market[0],HUB.market[1],70,190]);
+  for(const [wd,col] of [[6,C.pathDk],[4,C.path]]){
+    g.strokeStyle=col; g.lineWidth=wd; g.lineCap='round';
+    for(const r of roads) line(r[0],r[1],r[2],r[3]);
+  }
+  g.fillStyle=C.water; ell(POND.x,POND.y,POND.rx,POND.ry);
+  g.fillStyle=C.waterLt; ell(POND.x-6,POND.y-4,7,2.5);
+  for(const f of FIELDS){
+    g.fillStyle=C.wheatDk; g.fillRect(f[0]-2,f[1]-2,f[2]+4,f[3]+4);
+    g.fillStyle=C.wheat; g.fillRect(f[0],f[1],f[2],f[3]);
+    g.fillStyle=C.wheatDk; for(let yy=f[1]+3;yy<f[1]+f[3];yy+=6) g.fillRect(f[0],yy,f[2],1);
+  }
+  const trees=[]; let tries=0;
+  while(trees.length<34&&tries++<800){
+    const tx=R()*W, ty=20+R()*(H-30);
+    if(FIELDS.some(f=>tx>f[0]-6&&tx<f[0]+f[2]+6&&ty>f[1]-6&&ty<f[1]+f[3]+6)) continue;
+    if(HOUSES.some(h=>dist(tx,ty,h[0],h[1]-6)<20)) continue;
+    if(dist(tx,ty,HUB.well[0],HUB.well[1])<18||dist(tx,ty,HUB.market[0],HUB.market[1])<18||
+       dist(tx,ty,HUB.tavern[0],HUB.tavern[1])<22||dist(tx,ty,MILL[0],MILL[1])<22||dist(tx,ty,POND.x,POND.y)<30) continue;
+    trees.push([tx,ty]);
+  }
+  trees.sort((a,b)=>a[1]-b[1]).forEach(t=>tree(t[0],t[1]));
+  const [wx,wy]=HUB.well;                              // well
+  g.fillStyle=C.shade; ell(wx+2,wy+1,6,2.5);
+  g.fillStyle=C.stone; ell(wx,wy,5,3);
+  g.fillStyle=C.water; ell(wx,wy,3,1.5);
+  g.fillStyle=C.wood; g.fillRect(wx-4,wy-7,1,7); g.fillRect(wx+3,wy-7,1,7);
+  g.fillStyle=C.roof2; tri(wx-6,wy-7,wx,wy-11,wx+6,wy-7);
+  LANTERNS.push([wx,wy-6]);
+  const [mx,my]=HUB.market;                            // market stall
+  g.fillStyle=C.shade; g.fillRect(mx-6,my+1,14,2);
+  g.fillStyle=C.wood; g.fillRect(mx-7,my-3,14,3); g.fillRect(mx-7,my-9,1,6); g.fillRect(mx+6,my-9,1,6);
+  for(let i=0;i<6;i++){g.fillStyle=i%2?C.awnR:C.awnC; g.fillRect(mx-8+i*2.7,my-11,2.7,3);}
+  LANTERNS.push([mx,my-6]);
+  house(HUB.tavern[0],HUB.tavern[1],C.roofDk,26,18);   // tavern + sign
+  g.fillStyle=C.wood; g.fillRect(HUB.tavern[0]+8,HUB.tavern[1]-12,4,3);
+  LANTERNS.push([HUB.tavern[0],HUB.tavern[1]-4]);
+  house(MILL[0],MILL[1],C.roof,22,16);                 // mill with wheel
+  g.strokeStyle=C.woodDk; g.lineWidth=1; g.beginPath(); g.arc(MILL[0]+14,MILL[1]-8,4,0,Math.PI*2); g.stroke();
+  HOUSES.forEach((h,i)=>house(h[0],h[1],i%2?C.roof:C.roof2,18,14));
+  g=mainCtx;
+  return c;
+}
+
+/* ---- villagers ---- */
+function jobProp(v,x,by){
+  const d=v.dir>0?1:-1;
+  g.lineWidth=0.9;
+  if(v.job==='farmer'){g.strokeStyle=C.wood;line(x+3*d,by-3,x+4.5*d,by+3);g.fillStyle=C.stone;g.fillRect(x+3*d-(d<0?2:0),by-4,2.5,1.2);}
+  else if(v.job==='baker'){g.fillStyle=C.stoneDk;rr(x+2.5*d-(d<0?4:0),by-4.5,4,1.4,0.7);g.fillStyle=C.wheat;ell(x+4.5*d,by-5.4,1.6,1);}
+  else if(v.job==='fisher'){g.strokeStyle=C.wood;line(x-2*d,by-6,x+6*d,by-14);g.strokeStyle=C.paper;g.lineWidth=0.5;line(x+6*d,by-14,x+6*d,by-5);}
+  else {g.fillStyle=C.wood;rr(x+2.5*d-(d<0?3:0),by-4,3,3.5,1);g.fillStyle=C.paper;g.fillRect(x+2.5*d-(d<0?3:0),by-4.6,3,1);}
+}
+function drawVillager(v){
+  const x=Math.round(v.x), y=Math.round(v.y);
+  if(v.id===sel){g.strokeStyle=C.gold;g.lineWidth=1;g.beginPath();g.ellipse(x,y+1,7,3,0,0,Math.PI*2);g.stroke();}
+  g.fillStyle=C.shade; ell(x+1.5,y+0.5,3.2,1.2);
+  if(v.act==='sleep'){                                  // sleeping pose: lying down with a floating z
+    g.fillStyle=v.cloth; rr(x-5,y-4,10,4,2);
+    g.fillStyle=v.skin; circ(x-6,y-3.5,2.3);
+    g.fillStyle=v.hair; g.beginPath(); g.arc(x-6,y-3.5,2.5,Math.PI*0.6,Math.PI*1.5); g.fill();
+    g.fillStyle=C.paper; g.font='5px Georgia'; g.fillText('z',x+3,y-7-(performance.now()/700)%3);
+    return;
+  }
+  const walking=v.act==='walk';
+  const bob=walking?Math.abs(Math.sin(v.walk))*0.8:0, sw=walking?Math.sin(v.walk)*1.2:0, by=y-bob;
+  g.strokeStyle=C.legs; g.lineWidth=1.2; line(x-1,y,x-1-sw,y+2); line(x+1,y,x+1+sw,y+2);
+  g.fillStyle=v.cloth; rr(x-2.6,by-7,5.2,6.5,2);
+  g.fillStyle=v.skin; circ(x,by-9.5,2.4);
+  g.fillStyle=v.hair; g.beginPath(); g.arc(x,by-9.5,2.6,Math.PI*1.05,Math.PI*1.95); g.fill();
+  if(v.hat){g.fillStyle=C.wood;rr(x-3.2,by-12.4,6.4,1.5,0.7);rr(x-1.7,by-14.2,3.4,2.2,1);}
+  g.fillStyle=C.ink; g.fillRect(x+(v.dir>0?0.6:-1.2),by-9.8,0.6,0.7);
+  jobProp(v,x,by);
+}
+function star(cx,cy,r1,r2,n){g.beginPath();for(let i=0;i<n*2;i++){const r=i%2?r2:r1,a=i*Math.PI/n-Math.PI/2;g.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);}g.closePath();g.fill();}
+function drawIcon(v){                                     // mood icon built from shapes, shown during real events
+  const cx=Math.round(v.x), cy=Math.round(v.y-(v.act==='talk'?25:19)-(40-v.iconT)*0.05), k=v.icon;
+  g.fillStyle=C.bubble; circ(cx,cy,4);
+  if(k==='heart'){g.fillStyle=C.heart;circ(cx-1.2,cy-0.6,1.4);circ(cx+1.2,cy-0.6,1.4);tri(cx-2.5,cy-0.2,cx+2.5,cy-0.2,cx,cy+2.6);}
+  else if(k==='angry'){g.fillStyle=C.red;star(cx,cy,3,1.4,5);}
+  else if(k==='coin'){g.fillStyle=C.gold;circ(cx,cy,2.5);g.fillStyle=C.wheatDk;circ(cx,cy,1.2);}
+  else if(k==='excl'){g.fillStyle=C.wheatDk;g.fillRect(cx-0.6,cy-2.5,1.2,3);circ(cx,cy+1.7,0.7);}
+}
+function drawBubble(v){
+  const cx=Math.round(v.x), cy=Math.round(v.y-17);
+  g.fillStyle=C.bubble; rr(cx-6,cy-3.5,12,7,3.5); tri(cx-1.5,cy+3,cx+1.5,cy+3,cx,cy+5);
+  const ph=Math.floor(performance.now()/260)%3;
+  for(let i=0;i<3;i++){g.fillStyle=i<=ph?C.ink:C.stoneDk;circ(cx-3+i*3,cy,0.8);}
+}
+
+/* ---- lighting ---- */
+function nightAmount(m){                                   // 0 = day .. 1 = deep night, smooth ramps at dusk/dawn
+  if(m>=1140&&m<1320) return (m-1140)/180;
+  if(m>=1320||m<300) return 1;
+  if(m<420) return 1-(m-300)/120;
+  return 0;
+}
+function glow(x,y,r,a){
+  const gr=g.createRadialGradient(x,y,0,x,y,r);
+  gr.addColorStop(0,'rgba(255,217,138,1)'); gr.addColorStop(1,'rgba(255,217,138,0)');
+  g.globalAlpha=a; g.fillStyle=gr; g.beginPath(); g.arc(x,y,r,0,Math.PI*2); g.fill(); g.globalAlpha=1;
+}
+function drawLight(m){
+  const n=nightAmount(m);
+  if(m>=1020&&m<1200){g.globalAlpha=(m-1020)/180*0.14;g.fillStyle='#e8a05a';g.fillRect(0,0,W,H);g.globalAlpha=1;}   // warm dusk
+  if(n<=0) return;
+  g.globalAlpha=n*0.55; g.fillStyle=C.night; g.fillRect(0,0,W,H); g.globalAlpha=1;
+  g.globalCompositeOperation='lighter';
+  for(const p of WINDOWS) glow(p[0],p[1],7,n*0.85);       // glowing windows
+  for(const p of LANTERNS) glow(p[0],p[1],28,n*0.5);      // soft light pools
+  g.globalCompositeOperation='source-over';
+}
+
+function drawFrame(){
+  g.drawImage(stat,0,0);
+  g.setLineDash([2,2]); g.lineWidth=1;                     // rumor trails fade out
+  for(const t of trails){g.globalAlpha=t.life/60*0.9;g.strokeStyle=C.paper;line(t.x1,t.y1-4,t.x2,t.y2-4);}
+  g.setLineDash([]); g.globalAlpha=1;
+  const order=S.v.slice().sort((a,b)=>a.y-b.y);            // y-sort
+  for(const v of order) drawVillager(v);
+  drawLight(minuteOf(S.tick));
+  for(const v of S.v){if(v.act==='talk')drawBubble(v);if(v.iconT>0&&v.icon)drawIcon(v);}
+}
+
+/* ===================== UI: HUD, labels, panel, feed ===================== */
+const ACT_SHORT={walk:'walking',work:'working',talk:'talking',sleep:'asleep',socialize:'chatting',sell:'selling',shop:'shopping',rest:'resting',idle:''};
+function buildLabels(){
+  labelsEl.innerHTML=''; chipsEl.innerHTML=''; labelEls=[];
+  for(const v of S.v){
+    const s=document.createElement('span'); labelsEl.appendChild(s); labelEls.push(s);
+    const b=document.createElement('button'); b.innerHTML=`<i style="background:${v.cloth}"></i>${esc(v.name)} · ${v.job}`;
+    b.onclick=e=>{e.stopPropagation();openPanel(v.id);}; b.dataset.id=v.id; chipsEl.appendChild(b);
+  }
+}
+function updateLabels(){
+  for(const v of S.v){
+    const s=labelEls[v.id];
+    s.style.left=(v.x/W*100)+'%'; s.style.top=((v.y-(v.act==='sleep'?6:16))/H*100)+'%';
+    s.className=v.id===sel?'sel':'';
+    const a=ACT_SHORT[v.act]||''; if(s.dataset.a!==a||s.dataset.n!==v.name){s.dataset.a=a;s.dataset.n=v.name;s.innerHTML=esc(v.name)+(a?`<small>${a}</small>`:'');}
+  }
+  for(const b of chipsEl.children) b.className=(+b.dataset.id===sel)?'sel':'';
+}
+const hhmm=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+function updateHud(){
+  const m=minuteOf(S.tick), n=nightAmount(m);
+  clockEl.textContent=`${n>0.5?'☾':'☀'} Day ${S.day} · ${hhmm(m)}${paused?' · paused':''}`;
+}
+function openPanel(id){sel=id;renderPanel();if(window.innerWidth<=820)panel.scrollIntoView({behavior:'smooth',block:'nearest'});}
+function closePanel(){sel=-1;renderPanel();}
+function renderPanel(){
+  const top=panel.scrollTop;
+  if(sel<0){panel.innerHTML='<div class="hint">Click a villager (or a name below the village) to read their needs, feelings and diary. Esc closes.</div>';return;}
+  const v=S.v[sel], p=mood(v);
+  const bars=[['Fullness',100-v.need.hunger,'#c98f3c'],['Rest',100-v.need.fatigue,'#6f8fb0'],['Company',100-v.need.social,'#c46a7a'],['Mood',p,'#7e9c5b']]
+    .map(([l,val,c])=>`<div>${l}<div class="bar"><i style="width:${clamp(val,0,100)}%;background:${c}"></i></div></div>`).join('');
+  const feelings=S.v.filter(o=>o.id!==v.id).sort((a,b)=>v.op[b.id]-v.op[a.id]).map(o=>
+    `<tr><td><b>${esc(o.name)}</b></td><td>${Math.round(v.op[o.id])}</td><td>${feelWord(v.op[o.id])}${v.feud[o.id]?' (feud)':''}</td><td>${esc(reasonFor(S,v,o.id))}</td></tr>`).join('');
+  const mems=v.mem.map(m=>({m,ev:S.log[m.ev]})).sort((a,b)=>b.ev.t-a.ev.t).map(({m,ev})=>({ev,s:sentence(S,v,ev,m.role)})).filter(x=>x.s).slice(0,6)
+    .map(({ev,s})=>`<div class="mem"><span class="hint">Day ${ev.day} ${hhmm(ev.m)}, ${ev.place}</span><br>${esc(s)}</div>`).join('');
+  let dia='';
+  for(let d=S.day;d>=1;d--){const t=diaryFor(S,v.id,d);if(t)dia+=`<div class="dia"><b>Day ${d}</b> ${esc(t)}</div>`;}
+  panel.innerHTML=`<h2>${esc(v.name)}</h2><div class="sub">${v.job} · ${v.traits.join(', ')}</div>
+    <div><i>${esc(activityText(S,v))}</i> · feeling ${moodWord(p)}</div><div style="margin-top:6px">${bars}</div>
+    <div>Coins ${v.coins} · grain ${v.inv.grain} · bread ${v.inv.bread} · fish ${v.inv.fish} · meals ${v.inv.meal}</div>
+    <h3>Feelings</h3><table>${feelings}</table>
+    <h3>Recent memories</h3>${mems||'<div class="hint">Nothing memorable yet.</div>'}
+    <h3>Diary</h3>${dia||'<div class="hint">No entries yet.</div>'}`;
+  panel.scrollTop=top;
+}
+function feedUpdate(){
+  for(;lastEv<S.log.length;lastEv++){
+    const ev=S.log[lastEv];
+    if(ev.type==='rumor') trails.push({x1:ev.d.ax,y1:ev.d.ay,x2:ev.d.bx,y2:ev.d.by,life:60});
+    const txt=describe(S,ev); if(!txt) continue;
+    if(feedEl.firstChild&&feedEl.firstChild.className==='hint') feedEl.innerHTML='';
+    const d=document.createElement('div'); d.className=ev.type;
+    d.innerHTML=`<span class="t">Day ${ev.day} ${hhmm(ev.m)} · ${esc(ev.place)}</span><br>${esc(txt)}`;
+    feedEl.insertBefore(d,feedEl.firstChild);
+    while(feedEl.children.length>80) feedEl.removeChild(feedEl.lastChild);
+  }
+}
+function reset(seed){
+  seed=String(seed||'emberfall').trim()||'emberfall';
+  S=createSim(seed); stat=buildStatic(seed); lastEv=0; trails=[]; sel=-1;
+  $('seed').value=seed; feedEl.innerHTML='<div class="hint">Quiet so far. Events will appear here.</div>';
+  buildLabels(); renderPanel();
+}
+
+/* ===================== MAIN LOOP (fixed-timestep sim: 10 ticks/s at 1x) ===================== */
+const TICK_MS=100;
+let last=performance.now(), acc=0, panelT=0;
+function frame(now){
+  const dt=Math.min(250,now-last); last=now;
+  if(!paused){
+    acc+=dt*speed; let n=0;
+    while(acc>=TICK_MS&&n<80){step(S);acc-=TICK_MS;n++;}
+    if(n===80) acc=0;
+  }
+  feedUpdate();
+  for(const t of trails) t.life--;
+  trails=trails.filter(t=>t.life>0);
+  drawFrame(); updateLabels(); updateHud();
+  if(sel>=0&&now-panelT>600){panelT=now;renderPanel();}
+  requestAnimationFrame(frame);
+}
+
+/* ===================== INPUT ===================== */
+cv.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect(), mx=(e.clientX-r.left)*W/r.width, my=(e.clientY-r.top)*H/r.height;
+  let best=-1,bd=12;
+  for(const v of S.v){const d=dist(mx,my,v.x,v.y-4);if(d<bd){bd=d;best=v.id;}}
+  if(best>=0) openPanel(best); else closePanel();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
+document.addEventListener('mousedown',e=>{
+  if(sel>=0&&!panel.contains(e.target)&&e.target!==cv&&!chipsEl.contains(e.target)&&!$('top').contains(e.target)&&!$('feedBox').contains(e.target)) closePanel();
+});
+function setSpeed(s){speed=s;document.querySelectorAll('[data-sp]').forEach(b=>b.classList.toggle('on',+b.dataset.sp===s));}
+document.querySelectorAll('[data-sp]').forEach(b=>b.onclick=()=>setSpeed(+b.dataset.sp));
+$('pause').onclick=()=>{paused=!paused;$('pause').textContent=paused?'Resume':'Pause';};
+$('restart').onclick=()=>reset($('seed').value);
+$('random').onclick=()=>reset(Math.random().toString(36).slice(2,8));
+$('seed').addEventListener('keydown',e=>{if(e.key==='Enter')reset($('seed').value);});
+reset($('seed').value);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
